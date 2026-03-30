@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Online Voting</title>
+  <style>
+    :root {
+      --bg:#f4f7fc; --card:#fff; --primary:#1e3a8a; --accent:#10b981;
+      --text:#1f2937; --muted:#6b7280;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    body { background: linear-gradient(135deg, #e0e7ff 0%, #f3f4f6 45%, #dbeafe 100%); }
+    .container { max-width:760px; margin:2.5rem auto; padding:1.5rem; }
+    .card { background:var(--card); border:1px solid rgba(37, 99, 235, .2); border-radius:18px; box-shadow:0 14px 36px rgba(15,23,42,.18); padding:1.6rem; backdrop-filter: blur(4px); }
+    h1,h2{margin:.4rem 0;}
+    label { display:block; margin:.6rem 0 .2rem; font-weight:600; }
+    input[type="radio"] { margin-right:.5rem; accent-color:var(--accent); }
+    .candidate-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:1rem; margin-bottom:0.8rem; }
+    .candidate-card { border:1px solid #dbeafe; border-radius:14px; padding:0.9rem; background:#fff; transition: transform .2s ease, border-color .2s ease; }
+    .candidate-card:hover { transform: translateY(-2px); border-color:#93c5fd; box-shadow:0 8px 18px rgba(30,58,138,.12); }
+    .candidate-name { font-size:1.05rem; font-weight:700; margin:0 0 .1rem; }
+    .candidate-party { font-size:.86rem; color:var(--muted); margin-bottom:.55rem; }
+    .option { margin:.4rem 0; padding:.4rem .6rem; border:1px solid #dbeafe; border-radius:8px; transition:.2s ease; }
+    .option:hover { background:#eff6ff; border-color:#93c5fd; }
+    button { padding:.65rem 1rem; border:none; border-radius:8px; background:var(--primary); color:#fff; font-weight:700; cursor:pointer; transition:.2s ease; }
+    button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 6px 14px rgba(0,0,0,.1); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .secondary { background:#4d8af0; }
+    .danger { background:#ef4444; }
+    .controls { display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:0.8rem; }
+    .result-row { display:flex; justify-content:space-between; margin:.4rem 0; }
+    .bar { height:14px; border-radius:999px; background:var(--accent); transition:width .25s ease; }
+    .status { color:var(--muted); font-size:.9rem; margin-bottom:.7rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <header style="text-align:center; margin-bottom:1rem;">
+        <h1>🏛️ City Mayor Election 2026</h1>
+        <p style="margin:0.4rem 0 .7rem; font-size:1rem; color:#334155;">Choose your candidate and cast your vote for the future of the city.</p>
+      </header>
+      <p id="pollDesc" style="margin-bottom:.85rem;">Top candidates for mayor (1 vote per user).</p>
+      <div class="status" id="statusText">Poll is open.</div>
+
+      <div id="voteForm">
+        <div class="candidate-grid">
+          <div class="candidate-card option">
+            <div class="candidate-name">Ava Rivera</div>
+            <div class="candidate-party">Blue Progress Party</div>
+            <label><input type="radio" name="choice" value="Ava Rivera"> Select Ava Rivera</label>
+          </div>
+          <div class="candidate-card option">
+            <div class="candidate-name">Marcus Lee</div>
+            <div class="candidate-party">United Forward</div>
+            <label><input type="radio" name="choice" value="Marcus Lee"> Select Marcus Lee</label>
+          </div>
+          <div class="candidate-card option">
+            <div class="candidate-name">Priya Patel</div>
+            <div class="candidate-party">Green Community Alliance</div>
+            <label><input type="radio" name="choice" value="Priya Patel"> Select Priya Patel</label>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="voteBtn">Submit Vote</button>
+          <button id="clearBtn" type="button" class="danger">Clear Selection</button>
+        </div>
+      </div>
+
+      <div id="confirmation" style="display:none;">
+        <h2>✅ Vote received</h2>
+        <p id="choiceText"></p>
+        <button class="secondary" id="showResultsBtn">See Results</button>
+      </div>
+
+      <div id="results" style="display:none;">
+        <h2>📊 Results</h2>
+        <div id="resultList"></div>
+        <button class="secondary" id="backVoteBtn">Back to Poll</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const poll = {
+      title: "City Mayor Election 2026",
+      description: "Select a candidate to represent the city with integrity and vision.",
+      options: [
+        { name:"Ava Rivera", votes:0 },
+        { name:"Marcus Lee", votes:0 },
+        { name:"Priya Patel", votes:0 }
+      ],
+      open:true,
+      voted:false
+    };
+
+    document.getElementById("pollDesc").textContent = poll.description;
+    const statusText = document.getElementById("statusText");
+    const voteBtn = document.getElementById("voteBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const voteForm = document.getElementById("voteForm");
+    const confirmation = document.getElementById("confirmation");
+    const results = document.getElementById("results");
+    const choiceText = document.getElementById("choiceText");
+    const resultList = document.getElementById("resultList");
+
+    function setStatus() {
+      if (!poll.open) { statusText.textContent = "Poll is closed."; voteBtn.disabled = true; return; }
+      statusText.textContent = poll.voted ? "You already voted. Thanks!" : "Poll is open.";
+      voteBtn.disabled = !poll.open || poll.voted;
+    }
+
+    function renderResults() {
+      resultList.innerHTML = "";
+      const total = poll.options.reduce((a, o) => a + o.votes, 0) || 1;
+      poll.options.forEach(opt => {
+        const percent = ((opt.votes / total) * 100).toFixed(1);
+        const row = document.createElement("div");
+        row.innerHTML = `
+          <div class="result-row">
+            <span>${opt.name}</span>
+            <strong>${opt.votes} (${percent}%)</strong>
+          </div>
+          <div style="background:#e5e7eb;border-radius:999px; overflow:hidden">
+            <div class="bar" style="width:${percent}%"></div>
+          </div>`;
+        resultList.appendChild(row);
+      });
+    }
+
+    voteBtn.addEventListener("click", () => {
+      const selected = document.querySelector('input[name="choice"]:checked');
+      if (!selected) { alert("Please select an option."); return; }
+      if (!poll.open) { alert("Poll is closed."); return; }
+      if (poll.voted) { alert("Already voted."); return; }
+
+      const chosen = selected.value;
+      const opt = poll.options.find(o => o.name===chosen);
+      if (!opt) return;
+      opt.votes += 1;
+      poll.voted = true;
+      choiceText.textContent = `You selected: ${chosen}`;
+      voteForm.style.display = "none";
+      confirmation.style.display = "block";
+      setStatus();
+    });
+
+    clearBtn.addEventListener("click", () => {
+      document.querySelectorAll('input[name="choice"]').forEach(el => el.checked = false);
+      statusText.textContent = "Selection cleared. Choose another option.";
+    });
+
+    document.getElementById("showResultsBtn").addEventListener("click", () => {
+      confirmation.style.display = "none";
+      results.style.display = "block";
+      renderResults();
+    });
+
+    document.getElementById("backVoteBtn").addEventListener("click", () => {
+      results.style.display = "none";
+      voteForm.style.display = poll.voted ? "none" : "block";
+      confirmation.style.display = poll.voted ? "block" : "none";
+    });
+
+    setStatus();
+  </script>
+</body>
+</html>
